@@ -1,0 +1,272 @@
+<html>
+
+	<head>
+		<title></title>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no" /> </head>
+	<script src="http://libs.baidu.com/jquery/2.0.0/jquery.min.js"></script>
+	<link rel="stylesheet" type="text/css" href="css/animation.css" />
+	<script src="js/avalon.modern.min.js" type="text/javascript" charset="utf-8"></script>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+		}
+		
+		html,
+		body {
+			height: 100%;
+			width: 100%;
+			overflow-x: hidden;
+		}
+		
+		.nav {
+			height: 49px;
+			background: #f5f5f5;
+			width: 100%;
+			position: fixed;
+		}
+		
+		.box {
+			height: 1000px;
+			width: 100%;
+			background: red;
+			padding: 49px 0;
+		}
+		
+		.tab {
+			height: 49px;
+			background: #f5f5f5;
+			width: 100%;
+			position: fixed;
+			bottom: 0;
+		}
+	</style>
+	<script type="text/javascript">
+		$(function() {
+			//			setTimeout(function() {
+			//				var page = $('<div class="page animated slideInRight"></div>');
+			//				page.appendTo($("body"));
+			//				page.bind("animationend", function() {
+			//					console.info("end");
+			//				}).bind("webkitAnimationEnd", function() {
+			//					console.info("end");
+			//					page.unbind("webkitAnimationEnd");
+			//				});
+			//				setTimeout(function() {
+			//					page.addClass("slideOutRight");
+			//					page.bind("animationend", function() {
+			//						console.info("end");
+			//					}).bind("webkitAnimationEnd", function() {
+			//						page.remove();
+			//						console.info("end");
+			//						page.unbind("webkitAnimationEnd");
+			//					});
+			//				}, 3000)
+			//			}, 2000)
+		});
+		var Navigation = (function() {
+			//var _pageList = {}; //用于存储page的对象 不能采用对象 只能使用数组 同名page会被替换
+			var _pageList = [];
+			var _popendList = []; //pop出一个page时
+			var _popstartList = [];
+			var _hashList = []; //hash列表 用于阻止后退
+			var _lock = false;
+			var _lockfn = null;
+			var _signle = null;
+			var _state = 1; //0表示push改变hash 此时hashchange不能Pop
+			window.addEventListener("hashchange", function(event) {
+				if (_state === 0) {
+					_state = 1;
+					return;
+				}
+				if (_lock) {
+					var hash = _hashList.pop();
+					if (hash) {
+						location.hash = hash;
+						_hashList.push(hash);
+					}
+					if (_lockfn) {
+						_lockfn.call();
+						_lockfn = null;
+					}
+				} else {
+					Navigation().Pop();
+				}
+			})
+
+			function Lock(lockfn) {
+				if (lockfn) {
+					_lockfn = lockfn;
+					_lock = true;
+				} else {
+					_lock = false;
+				}
+			}
+
+			function Push(config) {
+				var name = config.name;
+				_hashList.push(name);
+				var dom = config.dom;
+				var pushend = config.pushend;
+				var popend = config.popend;
+				var popstart = config.popstart;
+				var pushanimate = config.pushanimate || 'slideInRight';
+				_popendList.push(popend);
+				_popstartList.push(popstart);
+				var page = $('<div class="page animated ' + pushanimate + '">' + dom + '</div>');
+				page.appendTo($("body"));
+				var hash = "#" + name;
+				location.hash = name;
+				_pageList.push(page);
+				_state = 0; //当push进一个page后点击后退可以执行pop
+				//只执行一次动画，动画执行完毕后解绑
+				page.bind("webkitAnimationEnd", function() {
+					page.unbind("webkitAnimationEnd");
+					if (pushend) {
+						pushend.call(page);
+					}
+				});
+			}
+			//在当前页面中添加Modal page 不改变hash值
+			function PushModal(config) {
+				var dom = config.dom;
+				var pushend = config.pushend;
+				var popend = config.popend;
+				var popstart = config.popstart;
+				var pushanimate = config.pushanimate || 'slideInRight';
+				//将当前page的函数取出进行合并
+				if (popstart) {
+					var pagepopstart = _popstartList.pop();
+					_popstartList.push(function() {
+						pagepopstart.call(page);
+						popstart.call(page);
+					});
+				}
+				if (popend) {
+					var pagepopend = _popendList.pop();
+					_popendList.push(function() {
+						pagepopend.call(page);
+						popend.call(page);
+					});
+				}
+				var page = $('<div class="page animated ' + pushanimate + '">' + dom + '</div>');
+				page.appendTo(_pageList[_pageList.length - 1]);
+				//只执行一次动画，动画执行完毕后解绑
+				page.bind("webkitAnimationEnd", function() {
+					page.unbind("webkitAnimationEnd");
+					if (pushend) {
+						pushend.call(page);
+					}
+				});
+			}
+
+			function Pop() {
+				var page = _pageList.pop();
+				var popstart = _popstartList.pop();
+				var popend = _popendList.pop();
+				if (page) {
+					if (popstart) {
+						popstart.call(page);
+					};
+					page.addClass("slideOutRight");
+					page.bind("webkitAnimationEnd", function() {
+						page.remove();
+						page.unbind("webkitAnimationEnd");
+						if (popend) {
+							popend.call(page);
+						}
+					});
+				}
+			}
+
+			function Remove(index) {
+				var page = _pageList[index];
+				if (page) {
+					page.remove();
+				}
+			}
+
+			function Single() {
+				return {
+					Push: Push,
+					PushModal: PushModal,
+					Pop: Pop,
+					Lock: Lock,
+					Remove: Remove
+				}
+			}
+			return function() {
+				if (!_signle) {
+					_signle = Single();
+				}
+				return _signle;
+			}
+		})();
+
+		function PageOne() {
+			Navigation().Push({
+				name: "pageOne",
+				dom: $("#tpl1").html(),
+				pushend: function() {
+					console.info("pushend");
+				},
+				popstart: function() {
+					//跳转到订单结果页面
+				}
+			});
+		}
+
+		function PageTow() {
+			Navigation().PushModal({
+				name: "pageTow",
+				dom: $("#tpl2").html(),
+				pushend: function() {
+					console.info("锁定pop");
+					Navigation().Lock(function() {
+						console.info("取消支付跳转到带支付页面");
+						Navigation().PushModal({
+							name: "orderResult",
+							dom: $("#tpl3").html(),
+							pushend: function() {
+								Navigation().Lock();
+							}
+						});
+					});
+				},
+				popstart: function() {
+					console.info("刷新购物车！");
+					//跳转到订单结果页面
+//					console.info("从支付方式页面跳转到订单确认页面");
+//					Navigation().Push({
+//						name: 'orderResult',
+//						dom: $("#tpl3").html()
+//					});
+				}
+			});
+		}
+	</script>
+
+	<body sroll="no">
+		<div class="nav">
+		</div>
+		<div class="box">
+			<a href="javascript:void(0)" onclick="PageOne()">showPage</a>
+		</div>
+		<div class="tab">
+
+		</div>
+
+		<template id="tpl1">
+			<div class="page" style="background:yellow"><a href="javascript:void(0)" onclick="PageTow()">PageTow</a></div>
+		</template>
+		<template id="tpl2">
+			<div class="page" style="background:blue"><a href="javascript:void(0)" onclick="PageThee()">PageThree</a></div>
+		</template>
+		<!--订单结果页面-->
+		<template id="tpl3">
+			<div class="page" style="background:orange"><a href="javascript:void(0)">这里是订单结果页面</a></div>
+		</template>
+	</body>
+
+</html>
